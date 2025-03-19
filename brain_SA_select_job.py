@@ -162,7 +162,7 @@ class sequencing_brain:
         j_idx = sqc_data[-2][job_position]
         return job_position
 
-    # used in the first half phase of warm up
+    # used in the first half phase of warm up 每一个func 都来一遍
     def action_warm_up(self, sqc_data):
         s_t = self.build_state(sqc_data)
         m_idx = sqc_data[-1]
@@ -487,6 +487,7 @@ class sequencing_brain:
             yield self.env.timeout(self.sequencing_target_NN_update_interval)
 
     # reduce the learning rate periodically
+    # 目标学习率为初始学习率的 1/10。将学习率从初始值降低到目标值的过程分为 10 步
     def update_learning_rate_process(self):
         # one second after the initial training
         yield self.env.timeout(self.warm_up)

@@ -555,7 +555,7 @@ class machine:
         # machine that needs to keep memory don't keep record for all jobs
         # only when they have to choose from several queuing jobs
         try:
-            # check whether corresponding experience exists, if not, ends at this line
+            # check whether corresponding experience exists, if not, ends at this line 用来确定 工件刚进来的时候时候有数据
             self.job_creator.incomplete_rep_memo[self.m_idx][self.decision_point]
             #print('PARAMETERS',self.m_idx,self.decision_point,self.env.now)
             #print('BEFORE\n',self.job_creator.incomplete_rep_memo[self.m_idx][self.decision_point])
