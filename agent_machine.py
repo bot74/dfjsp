@@ -528,6 +528,7 @@ class machine:
         self.time_till_due, self.slack, self.winq, self.avlm, self.next_pt, self.remaining_no_op, self.waited_time, \
         self.wc_idx, self.queue, self.m_idx]
         # print(" data : ",self.sequencing_data)
+        print("due_list: ", np.array(self.due_list))
         if self.log_info:
             job_info = [[self.current_pt, self.remaining_job_pt, np.array(self.due_list), self.env.now, self.completion_rate, \
         self.time_till_due, self.slack, self.winq, self.avlm, self.next_pt, self.remaining_no_op, self.waited_time, \
@@ -535,6 +536,11 @@ class machine:
             headers = ['current_pt', 'remaining_job_pt', 'np.array(due_list)', 'env.now', 'completion_rate', \
         'time_till_due', 'slack', 'winq', 'avlm', 'next_pt', 'remaining_no_op', 'waited_time', \
         'wc_idx', 'queue', 'm_idx']
+            # 修复：将数组转换为字符串
+            for row in job_info:
+                for i, item in enumerate(row):
+                    if isinstance(item, np.ndarray):
+                        row[i] = str(item)  # 或者用 item.tolist()
             table = tabulate(job_info, headers=headers, tablefmt='pretty')
             # 记录日志
             logging.info('Sequencing Log:\n%s', table)
