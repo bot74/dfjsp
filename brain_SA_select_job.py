@@ -66,16 +66,18 @@ class sequencing_brain:
             self.input_size = 25
             self.sequencing_action_NN = network_validated(self.input_size, self.output_size)
             self.sequencing_target_NN = copy.deepcopy(self.sequencing_action_NN)
-            self.address_seed = "{}\\sequencing_models\\MC_rwd"+str(kwargs['reward_function'])+".pt"
+            #self.address_seed = "{}\\sequencing_models\\MC_rwd"+str(kwargs['reward_function'])+".pt"
             self.build_state = self.state_multi_channel
             if 'DQN' in kwargs and kwargs['DQN']:
                 print("self_train_DQN chosen, press enter to continue...")
                 input()
                 self.train = self.train_dqn #try dqn
+                self.address_seed = "{}\\sequencing_models\\DQN\\MC_rwd_DQN"+str(kwargs['reward_function'])+".pt"
             if 'DDQN' in kwargs and kwargs['DDQN']:
                 print("self_train_DDQN chosen, press enter to continue...")
                 input()
                 self.train = self.train_ddqn
+                self.address_seed = "{}\\sequencing_models\\DDQN\\MC_rwd_DDQN"+str(kwargs['reward_function'])+".pt"
             self.action_DRL = self.action_sqc_rule
             for m in self.target_m_list:
                 m.build_state = self.state_multi_channel
