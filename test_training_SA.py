@@ -82,7 +82,7 @@ class shopfloor:
 # create the environment instance for simulation
 env = simpy.Environment()
 # create the shop floor instance
-span = 10000
+span = 100000
 m = 6
 wc = random.randint(int(m/3),int(m/2))  # wc 的数量范围是 [2, 3]
 wc = 3

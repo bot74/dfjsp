@@ -65,7 +65,8 @@ class sequencing_brain:
             self.sequencing_target_NN = copy.deepcopy(self.sequencing_action_NN)
             self.address_seed = "{}\\sequencing_models\\MC_rwd"+str(kwargs['reward_function'])+".pt"
             self.build_state = self.state_multi_channel
-            self.train = self.train_validated
+            #self.train = self.train_validated
+            self.train = self.train_dqn #try dqn
             self.action_DRL = self.action_sqc_rule
             for m in self.target_m_list:
                 m.build_state = self.state_multi_channel
@@ -500,7 +501,58 @@ class sequencing_brain:
             print('--------------------------------------------------------')
             print('learning rate adjusted to {} at time {}'.format(self.sequencing_action_NN.lr, self.env.now))
             print('--------------------------------------------------------')
-
+    def train_dqn(self):
+        """
+        draw the random minibatch to train the network
+        every element in the replay menory is a list [s_0, a_0, s_1, r_0]
+        all element of this list are tensors
+        """
+        size = min(len(self.rep_memo),self.minibatch_size)
+        minibatch = random.sample(self.rep_memo,size)
+        '''
+        slice, and stack the 1D tensors to several 3D tensors (batch, channel, vector)
+        the "torch.stack" is only applicable when the augment is a list of tensors, or multi-dimensional tensor
+        '''
+        sample_s0_batch = torch.stack([data[0] for data in minibatch], dim=0).reshape(size,1,self.input_size)
+        sample_s1_batch = torch.stack([data[2] for data in minibatch], dim=0).reshape(size,1,self.input_size)
+        sample_a0_batch = torch.stack([data[1] for data in minibatch], dim=0).reshape(size,1)
+        sample_r0_batch = torch.stack([data[3] for data in minibatch], dim=0).reshape(size,1)
+        '''
+        the size of these batches:
+        sample_s0_batch = sample_s1_batch = minibatch size * 1 * input_size
+        sample_a0_batch = sample_r0_batch = minibatch size * m_no
+        sample_r0_batch = minibatch size
+        '''
+        # get the Q value (current value of state-action pair) of s0
+        Q_0 = self.sequencing_action_NN.forward(sample_s0_batch)
+        #print('Q_0 is:\n', Q_0)
+        #print('a_0 is:', sample_a0_batch)
+        # get the current state-action value of actions that would have been taken
+        current_value = Q_0.gather(1, sample_a0_batch)
+        #print('current value is:', current_value)
+        # DQN 的目标值计算（直接使用目标网络的最大 Q 值）
+        Q_1_target = self.sequencing_target_NN.forward(sample_s1_batch).detach()
+        max_next_Q = torch.max(Q_1_target, dim=1)[0].unsqueeze(1)  # 直接取目标网络的最大值
+        target_value = sample_r0_batch + self.discount_factor * max_next_Q
+        #print('target value is:', target_value)
+        #print('TD error:',target_value - current_value)
+        # calculate the loss
+        loss = self.sequencing_action_NN.loss_func(current_value, target_value)
+        self.loss_time_record.append(self.env.now)
+        self.loss_record.append(float(loss))
+        if not self.env.now%50:
+            print('Time: %s, loss: %s:'%(self.env.now, loss))
+        # first, clear the gradient (old) of parameters
+        self.sequencing_action_NN.optimizer.zero_grad()
+        # second, calculate gradient (new) of parameters
+        loss.backward(retain_graph=True)
+        '''
+        # check the gradient, to avoid exploding/vanishing gradient, very seldom though
+        for param in self.sequencing_action_NN.module_dict[m_idx].parameters():
+            print(param.grad.norm())
+        '''
+        # third, update the parameters
+        self.sequencing_action_NN.optimizer.step()        
     def train_validated(self):
         """
         draw the random minibatch to train the network
