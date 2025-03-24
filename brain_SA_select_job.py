@@ -14,6 +14,9 @@ from tabulate import tabulate
 import sequencing
 import os
 
+#device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#print(f"Using device: {device}")
+
 class sequencing_brain:
     def __init__(self, env, job_creator, all_machines, target_machines, warm_up, span, *args, **kwargs):
         # initialize the environment and the machines to be controlled
@@ -65,8 +68,14 @@ class sequencing_brain:
             self.sequencing_target_NN = copy.deepcopy(self.sequencing_action_NN)
             self.address_seed = "{}\\sequencing_models\\MC_rwd"+str(kwargs['reward_function'])+".pt"
             self.build_state = self.state_multi_channel
-            #self.train = self.train_validated
-            self.train = self.train_dqn #try dqn
+            if 'DQN' in kwargs and kwargs['DQN']:
+                print("self_train_DQN chosen, press enter to continue...")
+                input()
+                self.train = self.train_dqn #try dqn
+            if 'DDQN' in kwargs and kwargs['DDQN']:
+                print("self_train_DDQN chosen, press enter to continue...")
+                input()
+                self.train = self.train_ddqn
             self.action_DRL = self.action_sqc_rule
             for m in self.target_m_list:
                 m.build_state = self.state_multi_channel
@@ -553,7 +562,7 @@ class sequencing_brain:
         '''
         # third, update the parameters
         self.sequencing_action_NN.optimizer.step()        
-    def train_validated(self):
+    def train_ddqn(self):
         """
         draw the random minibatch to train the network
         every element in the replay menory is a list [s_0, a_0, s_1, r_0]

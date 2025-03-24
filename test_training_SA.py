@@ -69,7 +69,7 @@ class shopfloor:
 
         '''STEP 5: set up the brains for workcenters'''
         self.brain = brain_SA_select_job.sequencing_brain(self.env, self.job_creator, self.m_list, self.m_list, self.span/10, self.span, \
-        MC = 0, IQL = 0, I_DDQN = 0, MR = 1, TEST = 1, \
+        MC = 0, IQL = 0, I_DDQN = 0, MR = 1, TEST = 1, DQN = 0, DDQN =1, \
         reward_function = 13)
         '''STEP 6: run the simulaiton'''
         env.run()
@@ -82,7 +82,7 @@ class shopfloor:
 # create the environment instance for simulation
 env = simpy.Environment()
 # create the shop floor instance
-span = 100000
+span = 10000
 m = 6
 wc = random.randint(int(m/3),int(m/2))  # wc 的数量范围是 [2, 3]
 wc = 3
