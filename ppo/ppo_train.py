@@ -3,6 +3,7 @@ import os.path
 import gym
 import torch
 import numpy as np
+from ppo_agent import PPOAgent #todo
 
 scenario = 'Pendulum-v1'
 env = gym.make(scenario)
