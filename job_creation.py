@@ -21,7 +21,7 @@ class creation:
         if 'seed' in kwargs:
             np.random.seed(kwargs['seed'])
             print("Random seed of job creation is fixed, seed: {}".format(kwargs['seed']))
-        self.log_info = True
+        self.log_info = False
         
         # environemnt and simulation span
         self.env = env

@@ -18,35 +18,36 @@ def random_routing(idx, data, job_pt, job_slack, wc_idx, *args):
     machine_idx = np.random.randint(len(job_pt))
     return machine_idx
 
-def TT(idx, data, job_pt, job_slack, wc_idx, *args): # shortest total waiting time
+def TT(idx, data, job_pt, ttd, job_slack, wc_idx, *args): # shortest total waiting time
     # axis=0 means choose along columns
     # print("routing data:", data)
     rank = np.argmin(data, axis=0)
     machine_idx = rank[0]
     return machine_idx
 
-def ET(idx, data, job_pt, job_slack, wc_idx, *args): # minimum exceution time
+def ET(idx, data, job_pt, ttd, job_slack, wc_idx, *args): # minimum exceution time
     machine_idx = np.argmin(job_pt)
     return machine_idx
 
-def EA(idx, data, job_pt, job_slack, wc_idx, *args): # earliest available
+def EA(idx, data, job_pt, ttd, job_slack, wc_idx, *args):# earliest available
     # print("routing data:",data, np.transpose(data))
     rank = np.argmin(data, axis=0)
+    # print("rank:",rank)
     machine_idx = rank[1]
     return machine_idx
 
-def SQ(idx, data, job_pt, job_slack, wc_idx, *args): # shortest queue
+def SQ(idx, data, job_pt, ttd, job_slack, wc_idx, *args):# shortest queue
     rank = np.argmin(data, axis=0)
     machine_idx = rank[2]
     return machine_idx
 
-def CT(idx, data, job_pt, job_slack, wc_idx, *args): # earliest completion time
+def CT(idx, data, job_pt, ttd, job_slack, wc_idx, *args): # earliest completion time
     #print(data,job_pt)
     completion_time = np.array(data)[:,1].clip(0) + np.array(job_pt)
     machine_idx = completion_time.argmin()
     return machine_idx
 
-def UT(idx, data, job_pt, job_slack, wc_idx, *args): # lowest utilization rate
+def UT(idx, data, job_pt, ttd, job_slack, wc_idx, *args): # lowest utilization rate
     rank = np.argmin(data, axis=0)
     machine_idx = rank[3]
     return machine_idx

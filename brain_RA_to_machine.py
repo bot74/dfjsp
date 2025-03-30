@@ -39,8 +39,10 @@ class routing_brain:
         # specify the path to store the model
         self.path = sys.path[0]
         # state space, eah machine generate 3 types of data, along with the processing time of arriving job, and job slack
-        self.input_size = 4 + 5 # 4 for globle state, 7 for RA state
+        self.input_size = 17
         # action space, consists of all selectable machines
+        for wc in self.wc_list:
+            wc.job_routing = self.action_warm_up
         self.func_list = [routing.TT, routing.ET, routing.EA, routing.SQ]
         self.func_selection = 0
         self.output_size = len(self.func_list)
@@ -53,12 +55,12 @@ class routing_brain:
         if 'TEST' in kwargs and kwargs['TEST']:
             print("---X TEST mode ON X---")
             self.address_seed = "{}\\routing_models\\TEST_state_dict"
-            self.routing_action_NN = build_network_TEST(self.input_size, self.output_size)
+            self.routing_action_NN = bulid_network_validated(self.input_size, self.output_size)
             self.routing_target_NN = copy.deepcopy(self.routing_action_NN)
-            self.build_state = self.state_deeper_new
+            self.build_state = self.state_mutil_channel
             self.train = self.train_DDQN
             for wc in self.wc_list:
-                wc.build_state = self.state_deeper_new
+                wc.build_state = self.state_mutil_channel
 
 
         ''' specify the optimizer '''
@@ -125,11 +127,17 @@ class routing_brain:
         # from routing.earliest_available to here
         # 一开始的时候，就让工作中心的路由函数变成 random exploration
         print('+++ Take over the routing function of target workcenter +++')
-        for wc in self.wc_list:
-            wc.job_routing = self.CT
-            wc.job_routing = self.action_random_exploration
-        # upper half of warm-up period
-        yield self.env.timeout(0.9*self.warm_up)
+        # for wc in self.wc_list:
+        #     wc.job_routing = self.CT
+        #     wc.job_routing = self.action_random_exploration
+        # # upper half of warm-up period
+        # yield self.env.timeout(0.9*self.warm_up)
+        for idx,func in enumerate(self.func_list):
+            self.func_selection = idx
+            print('set to rule {}'.format(func))
+            for wc in self.wc_list:
+                self.func_selection = idx
+            yield self.env.timeout(self.warm_up/10)
         
         print("Warm-up period accomplished, start random exploration", self.env.now)
         '''
@@ -149,10 +157,10 @@ class routing_brain:
             wc.job_routing = self.action_DRL
 
     # use as the default, initial routing rule for workcenter
-    def EA(self, job_idx, routing_data, job_pt, job_slack, wc_idx, *args):
+    def EA(self, job_idx, routing_data, job_pt,ttd, job_slack, wc_idx, *args):
         # concatenate all data, build state, dtype is float
         # s_t = self.build_state(routing_data, job_pt, job_slack, wc_idx)
-        s_t = self.build_state(args[2], job_pt, job_slack, wc_idx)
+        s_t = self.build_state(routing_data, job_pt, ttd, job_slack, wc_idx)
         # axis=0 means choose along columns
         rank = np.argmin(routing_data, axis=0)
         a_t = torch.tensor(rank[1])
@@ -162,9 +170,9 @@ class routing_brain:
         print('ET ROUTING: wc {} assign job {} to m {}'.format(wc_idx, job_idx,self.wc_list[wc_idx].m_list[a_t].m_idx))
         return a_t
 
-    def CT(self, job_idx, routing_data, job_pt, job_slack, wc_idx, *args): # earliest completion time
+    def CT(self, job_idx, routing_data, job_pt,ttd, job_slack, wc_idx, *args): # earliest completion time
         # s_t = self.build_state(routing_data, job_pt, job_slack, wc_idx)
-        s_t = self.build_state(args[2], job_pt, job_slack, wc_idx)
+        s_t = self.build_state(routing_data, job_pt, ttd, job_slack, wc_idx)
 
         #print(data,job_pt)
         completion_time = np.array(routing_data)[:,1].clip(0) + np.array(job_pt)
@@ -175,17 +183,29 @@ class routing_brain:
         # print('CT time ROUTING: wc {} assign job {} to m {}'.format(wc_idx, job_idx,self.wc_list[wc_idx].m_list[a_t].m_idx))
         return a_t
 
+    # used in the first half phase of warm up 每一个func 都来一遍
+    def action_warm_up(self, job_idx, routing_data, job_pt,ttd, job_slack, wc_idx, *args):
+        s_t = self.build_state(routing_data, job_pt, ttd, job_slack, wc_idx)
+
+        # action is index of rule, NOT index or position of job
+        a_t = torch.tensor(self.func_selection)
+        machine_position = self.func_list[self.func_selection](job_idx ,routing_data, ttd, job_pt, job_slack, wc_idx)
+        # add the state at sequencing to job creator's corresponding repository
+        self.build_experience(job_idx, s_t, a_t, wc_idx)
+        self.time_record.append(self.env.now)
+        return machine_position
+    
     # random exploration is for collecting more experience
     # routing_data 代表了 routing 方法 选择哪个机器
     # args[2] 代表了那些需要被处理进网络训练的数据
-    def action_random_exploration(self, job_idx, routing_data, job_pt, job_slack, wc_idx, *args):
+    def action_random_exploration(self, job_idx, routing_data, job_pt, ttd, job_slack, wc_idx, *args):
         # s_t = self.build_state(routing_data, job_pt, job_slack, wc_idx)
-        s_t = self.build_state(args[2], job_pt, job_slack, wc_idx)
+        s_t = self.build_state(routing_data, job_pt, ttd, job_slack, wc_idx)
         # generate a random number in [0, self.m_per_wc)
         # a_t = torch.randint(0,self.m_per_wc,[])
         self.func_selection = np.random.randint(self.output_size)
         a_t = torch.tensor(self.func_selection)
-        machine_position = self.func_list[self.func_selection](job_idx ,routing_data, job_pt, job_slack, wc_idx)
+        machine_position = self.func_list[self.func_selection](job_idx ,routing_data, ttd, job_pt, job_slack, wc_idx)
         # add current state and action to target wc's incomplete experience
         self.build_experience(job_idx, s_t, a_t, wc_idx)
         self.time_record.append(self.env.now)
@@ -193,21 +213,21 @@ class routing_brain:
         # print('RANDOM ROUTING: wc {} assign job {} to m {}'.format(wc_idx, job_idx,self.wc_list[wc_idx].m_list[machine_position].m_idx))
         return machine_position
 
-    def action_DRL(self, job_idx, routing_data, job_pt, job_slack, wc_idx, *args):
+    def action_DRL(self, job_idx, routing_data, job_pt, ttd, job_slack, wc_idx, *args):
         # s_t = self.build_state(routing_data, job_pt, job_slack, wc_idx)
-        s_t = self.build_state(args[2], job_pt, job_slack, wc_idx)
+        s_t = self.build_state(routing_data, job_pt, ttd, job_slack, wc_idx)
         # generate the action
         if random.random() < self.epsilon:
             # a_t = torch.randint(0,self.m_per_wc,[])
             a_t = torch.randint(0,len(self.func_list),[])
-            machine_position = self.func_list[self.func_selection](job_idx, routing_data, job_pt, job_slack, wc_idx)
+            machine_position = self.func_list[self.func_selection](job_idx, routing_data, ttd, job_pt, job_slack, wc_idx)
             # print('RANDOM ROUTING: wc {} assign job {} to m {}'.format(wc_idx, job_idx,self.wc_list[wc_idx].m_list[machine_position].m_idx))
         else:
             # input state to policy network, produce the state-action value
             value = self.routing_action_NN.forward(s_t.reshape(1,1,self.input_size), wc_idx)
             # print("State:",s_t, 'State-Action Values:', value)
             a_t = torch.argmax(value)
-            machine_position = self.func_list[self.func_selection](job_idx, routing_data, job_pt, job_slack, wc_idx)
+            machine_position = self.func_list[self.func_selection](job_idx, routing_data, ttd, job_pt, job_slack, wc_idx)
             # print('DRL ROUTING: wc {} assign job {} to m {}'.format(wc_idx, job_idx,self.wc_list[wc_idx].m_list[machine_position].m_idx))
         # add current state and action to target wc's incomplete experience
         # this is the first half of a single record of experience
@@ -223,7 +243,7 @@ class routing_brain:
     2. downwards are functions used for building the state of the experience (replay memory)
     '''
 
-    def state_deeper(self, routing_data, job_pt, job_slack, wc_idx):
+    def state_deeper(self, routing_data, job_pt, ttd, job_slack, wc_idx):
         coming_job_idx = np.where(self.job_creator.next_wc_list == wc_idx)[0]  # return the index of coming jobs
         coming_job_no = coming_job_idx.size  # expected arriving job number
         if coming_job_no:  # if there're jobs coming at your workcenter
@@ -260,10 +280,77 @@ class routing_brain:
         # print(s_t, s_t.shape, s_t.dtype)
         return s_t
 
-    def state_deeper_new(self, routing_data, job_pt, job_slack, wc_idx):
+    def state_deeper_new(self, routing_data, job_pt, ttd, job_slack, wc_idx):
         st = np.concatenate([routing_data])
         s_t = torch.tensor(st, dtype=torch.float32)
         return s_t
+
+    def state_mutil_channel(self, routing_data, job_pt, ttd, job_slack, wc_idx):
+        coming_job_idx = np.where(self.job_creator.next_wc_list == wc_idx)[0]  # return the index of coming jobs
+        coming_job_no = coming_job_idx.size  # expected arriving job number
+        # if coming_job_no:  # if there're jobs coming at your workcenter
+        #     next_job = self.job_creator.release_time_list[coming_job_idx].argmin()  # the index of next job
+        #     coming_job_time = (self.job_creator.release_time_list[coming_job_idx] - self.env.now)[next_job]  # time from now when next job arrives at workcenter
+        #     coming_job_slack = self.job_creator.arriving_job_slack_list[coming_job_idx][next_job]  # what's the average slack time of the arriving job
+        # else:
+        #     coming_job_time = 0
+        #     coming_job_slack = 0
+        # update the training data for routing
+        in_system_job_no = self.job_creator.in_system_job_no
+        buffer_num = sum(sublist[2] for sublist in routing_data)
+        # print('buffer_num:', buffer_num, 'routing_data:', routing_data)
+        buffer_num_mean = buffer_num / len(routing_data)
+
+        job_pt = np.array([job_pt], dtype=np.float32)  # Convert to 1D array
+        job_pt_sum = np.sum(job_pt)
+        job_pt_mean = np.mean(job_pt)
+        job_pt_min = np.min(job_pt)
+        job_pt_std_dev = np.std(job_pt)
+        job_pt_cv = job_pt_std_dev / job_pt_mean
+
+        m_available_list = [sublist[1] for sublist in routing_data]
+        m_available_sum = sum(m_available_list)
+        m_available_min = min(m_available_list)
+        m_available_mean = np.mean(m_available_list)
+        m_available_std_dev = np.std(m_available_list)
+        # 检查 m_available_mean 是否为 0 或 NaN
+        if m_available_mean == 0 or np.isnan(m_available_mean):
+            m_available_cv = 0  # 或其他默认值
+        else:
+            m_available_cv = m_available_std_dev / m_available_mean
+
+        # job_slack = np.array([job_slack], dtype=np.float32)  # Convert to 1D array
+        # ttd = np.array([ttd], dtype=np.float32)  # Convert to 1D array
+
+        m_ur_list = [sublist[4] for sublist in routing_data]
+        # print('m_ur_list:', m_ur_list)
+        ur_mean = np.mean(m_ur_list)
+        ur_std_dev = np.std(m_ur_list)
+        # 计算 ur_cv
+        if ur_mean == 0 or np.isnan(ur_mean):
+            ur_cv = 0  # 或其他默认值
+        else:
+            ur_cv = ur_std_dev / ur_mean
+
+        # information of progression of jobs, get from the job creator
+        global_comp_rate = self.job_creator.comp_rate
+        global_realized_tard_rate = self.job_creator.realized_tard_rate
+        global_exp_tard_rate = self.job_creator.exp_tard_rate
+
+        # use raw data, and leave the magnitude adjustment to normalization layers
+        no_info = [in_system_job_no, buffer_num_mean, coming_job_no] # info in job number
+        pt_info = [job_pt_sum, job_pt_mean, job_pt_min] # info in processing time
+        m_available_info = [m_available_sum, m_available_mean, m_available_min] # info in machine available time
+        ttd_slack_info = [job_slack, ttd] # info in time till due
+        progression = [global_comp_rate, global_realized_tard_rate, global_exp_tard_rate] # progression info
+        heterogeneity = [job_pt_cv, m_available_cv, ur_cv] # heterogeneity
+        # print('no_info:', no_info, 'pt_info:', pt_info, 'm_available_info:', m_available_info, 'ttd_slack_info:', ttd_slack_info, 'progression:', progression, 'heterogeneity:', heterogeneity)
+        # concatenate the data input
+        s_t = np.nan_to_num(np.concatenate([no_info, pt_info, m_available_info, ttd_slack_info, progression, heterogeneity]),nan=0,posinf=1,neginf=-1)
+        # convert to tensor
+        s_t = torch.tensor(s_t, dtype=torch.float)
+        return s_t
+        
 
     '''
     3. downwards are functions used for building / updating replay memory
@@ -302,8 +389,8 @@ class routing_brain:
             # 将 self.rep_memo 中的张量转换为列表
         rep_memo_converted = self.convert_rep_memo(self.rep_memo)
 
-        print('INITIALIZATION - replay_memory is:\n',len(self.rep_memo),\
-        tabulate(rep_memo_converted, headers = ['s_t','a_t','r_t','s_t+1']))
+        # print('INITIALIZATION - replay_memory is:\n',len(self.rep_memo),\
+        # tabulate(rep_memo_converted, headers = ['s_t','a_t','r_t','s_t+1']))
         print('input-size:', self.input_size, '\nreplay_memory_size:', len(self.rep_memo))
         print('---------------------------initialization accomplished-----------------------------')
         if self.log_info:
@@ -541,16 +628,17 @@ class routing_brain:
         '''
         # calculate the loss
         loss = self.routing_action_NN.loss_func(current_value, target_value)
-        # print('loss is:', loss)
+        if not self.env.now%50:
+            print('Time: %s, loss: %s:'%(self.env.now, loss))
 
-        if self.log_info:
-            logging.info('Q_1_action is:\n%s'%Q_1_action)
-            logging.info('Q_1_target is:\n%s'%Q_1_target)
-            logging.info('max value of Q_1_action is:\n%s'%max_Q_1_action)
-            logging.info('max idx of Q_1_action is:\n%s'%max_Q_1_action_idx)
-            logging.info('estimated value of next state is:\n%s'%next_state_value)
-            logging.info('discounted next state value is:\n%s'%discounted_next_state_value)
-            logging.info('loss is:\n%s'%loss)
+        # if self.log_info:
+        #     logging.info('Q_1_action is:\n%s'%Q_1_action)
+        #     logging.info('Q_1_target is:\n%s'%Q_1_target)
+        #     logging.info('max value of Q_1_action is:\n%s'%max_Q_1_action)
+        #     logging.info('max idx of Q_1_action is:\n%s'%max_Q_1_action_idx)
+        #     logging.info('estimated value of next state is:\n%s'%next_state_value)
+        #     logging.info('discounted next state value is:\n%s'%discounted_next_state_value)
+        #     logging.info('loss is:\n%s'%loss)
 
         self.loss_record.append(float(loss))
         # clear the gradient
@@ -597,6 +685,12 @@ class routing_brain:
         plt.show()
         # save the figure if required
         if 'save' in kwargs and kwargs['save']:
+            # 获取目标目录路径
+            save_dir = os.path.join(sys.path[0], "experiment_result")
+            # 如果目录不存在，则创建目录
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+
             address = sys.path[0]+"//experiment_result//RA_loss_{}wc_{}m.png".format(len(self.job_creator.wc_list),len(self.m_list))
             fig.savefig(address, dpi=500, bbox_inches='tight')
             print('figure saved to'+address)
@@ -681,4 +775,85 @@ class build_network_TEST(nn.Module):
         x = self.fc6(x)
         x = self.tanh(x)
         x = self.fc7(x)
+        return x
+    
+class bulid_network_validated(nn.Module):
+    def __init__(self, input_size, output_size):
+        super(bulid_network_validated, self).__init__()
+        self.lr = 0.001
+        self.input_size = input_size
+        self.output_size = output_size
+        # for slicing the data
+        self.no_size = 3
+        self.pt_size = 6
+        self.m_available_size = 9
+        self.ttd_slack_size = 11
+        # FCNN parameters
+        layer_1 = 48
+        layer_2 = 36
+        layer_3 = 36
+        layer_4 = 24
+        layer_5 = 24
+        layer_6 = 12
+        # normalization modules
+        self.normlayer_no = nn.Sequential(
+                                nn.InstanceNorm1d(3),
+                                nn.Flatten()
+                                )
+        self.normlayer_pt = nn.Sequential(
+                                nn.InstanceNorm1d(3),
+                                nn.Flatten()
+                                )
+        self.normlayer_m_available = nn.Sequential(
+                                nn.InstanceNorm1d(3),
+                                nn.Flatten()
+                                )
+        self.normlayer_ttd_slack = nn.Sequential(
+                                nn.InstanceNorm1d(2),
+                                nn.Flatten()
+                                )
+        # shared layers of machines
+        self.subsequent_module = nn.Sequential(
+                                nn.Linear(self.input_size, layer_1),
+                                nn.Tanh(),
+                                nn.Linear(layer_1, layer_2),
+                                nn.Tanh(),
+                                nn.Linear(layer_2, layer_3),
+                                nn.Tanh(),
+                                nn.Linear(layer_3, layer_4),
+                                nn.Tanh(),
+                                nn.Linear(layer_4, layer_5),
+                                nn.Tanh(),
+                                nn.Linear(layer_5, layer_6),
+                                nn.Tanh(),
+                                nn.Linear(layer_6, output_size)
+                                )
+        # Huber loss function
+        self.loss_func = F.smooth_l1_loss
+        # the universal network for all scheudling agents
+        self.network = nn.ModuleList([self.normlayer_no, self.normlayer_pt, self.normlayer_m_available, self.normlayer_ttd_slack, self.subsequent_module])
+        # accompanied by optimizer
+        self.optimizer = optim.SGD(self.network.parameters(), lr=self.lr, momentum = 0.9)
+
+    def forward(self, x, *args):
+        # print('original',x)
+        # slice the data
+        x_no = x[:,:, : self.no_size]
+        x_pt = x[:,:, self.no_size : self.pt_size]
+        x_m_available = x[:,:, self.pt_size : self.m_available_size]
+        x_ttd_slack = x[:,:, self.m_available_size : self.ttd_slack_size]
+        x_rest = x[:,:, self.ttd_slack_size :].squeeze(1)
+        # normalize data in multiple channels
+        x_normed_no = self.network[0](x_no)
+        x_normed_pt = self.network[1](x_pt)
+        x_normed_m_available = self.network[2](x_m_available)
+        x_normed_ttd_slack = self.network[3](x_ttd_slack)
+        #print('normalized',x_normed_no)
+        # concatenate all data
+        #print(x_normed_no, x_normed_pt, x_normed_remaining_pt, x_normed_ttd, x_normed_slack, x_rest)
+        x = torch.cat([x_normed_no, x_normed_pt, x_normed_m_available, x_normed_ttd_slack, x_rest], dim=1)
+        # print('combined',x)
+        # the last, independent part of module
+        x = self.network[4](x)
+        #print('output',x)
         return x

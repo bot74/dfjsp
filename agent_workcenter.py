@@ -154,6 +154,7 @@ class workcenter:
                 # 更新 添加了cmt 让slack time减去了剩下工序的最大时间
                 self.estimated_slack_time = self.due_list[0] - self.env.now - self.least_waiting - np.sum(remaining_ptl.max(axis=1))
                 self.estimated_slack_time = self.due_list[0] - self.env.now - self.least_waiting - np.sum(remaining_cmt.max(axis=1))
+                self.ttd = self.due_list[0] - self.env.now
                 # and remove pt of current operation on constituent machines 因为第一个已经分配给了一个特定的机器 所以删除
                 self.remaining_ptl = np.delete(remaining_ptl, 0, axis=0) # remove the first element (row) of remaining_ptl, because it's dispatched to a specific machine 
                 self.remaining_mpc = np.delete(remaining_mpc, 0, axis=0)
@@ -161,43 +162,7 @@ class workcenter:
 
                 # select a machine
                 # the returned value is machine's position in self.m_list
-
-                # 对每个子数组求均值
-                self.mean_values = [np.mean(arr) for arr in remaining_ptl]
-                self.current_pt_mean = np.mean(self.current_pt)
-                self.current_pt_std_dev = np.std(self.current_pt)
-                
-                if len(self.mean_values) > 0:
-                    self.remaining_time_mean = np.mean(self.mean_values)
-                    self.remaining_time_std_dev = np.std(self.mean_values)
-                else:
-                    self.remaining_time_mean = 0
-                    self.remaining_time_std_dev = 0
-
-                    # update the training data for routing
-                self.routing_training_data = [
-                    self.job_creator.in_system_job_no,  # Total number of system jobs
-                    self.buffer_num,                    # Total number of buffers in work center
-                    self.ur_mean,                       # Mean of machine utilization rates
-                    self.ur_std_dev,                    # Standard deviation of machine utilization rates
-                    self.current_pt_mean,               # Mean of current processing time of jobs
-                    self.m_available_mean,              # Mean of machine available time
-                    self.m_available_std_dev,            # Standard deviation of machine available time
-                    self.m_cumulative_pt_mean,          # Mean of cumulative processing time of jobs
-                    self.m_cumulative_pt_std_dev        # Standard deviation of cumulative processing time of jobs
-                ]
-                # logging.info(
-                #     f"\nTotal number of system jobs: {self.job_creator.in_system_job_no}\n"
-                #     f"Total number of buffers in work center: {self.buffer_num}\n"
-                #     f"Mean of machine utilization rates: {self.ur_mean}\n"
-                #     f"Standard deviation of machine utilization rates: {self.ur_std_dev}\n"
-                #     f"Mean of current processing time of jobs: {self.current_pt_mean}\n"
-                #     f"Mean of machine available time: {self.m_available_mean}\n"
-                #     f"Standard deviation of machine available time: {self.m_available_std_dev}\n"
-                #     f"Mean of cumulative processing time of jobs: {self.m_cumulative_pt_mean}\n"
-                #     f"Standard deviation of cumulative processing time of jobs: {self.m_cumulative_pt_std_dev}"
-                # )
-                selected_machine_index = self.job_routing(self.queue[0], self.routing_data, self.current_pt, self.estimated_slack_time, self.wc_idx, np.sum(self.mean_values), len(self.remaining_ptl), self.routing_training_data)
+                selected_machine_index = self.job_routing(self.queue[0], self.routing_data, self.current_pt,self.ttd, self.estimated_slack_time, self.wc_idx, np.sum(remaining_ptl.mean(axis=1)), len(remaining_ptl))
                 # print(self.queue,self.queue[0], self.routing_data, selected_machine_index, current_pt)
                 # after assign this job to machine, the amount that machine's available time will increase by
                 increased_available_time = self.current_pt[selected_machine_index]
@@ -263,44 +228,16 @@ class workcenter:
         self.average_waiting = avg[1]
         # print(self.wc_idx,self.routing_data,self.average_waiting,avg)
 
-        # update the training data for routing
-        self.buffer_num = sum(sublist[2] for sublist in self.routing_data)
-        self.m_ur_list = [sublist[4] for sublist in self.routing_data]
-        self.ur_mean = np.mean(self.m_ur_list)
-        self.ur_std_dev = np.std(self.m_ur_list)
-        self.m_available_list = [sublist[1] for sublist in self.routing_data]
-        self.m_available_mean = np.mean(self.m_available_list)
-        self.m_available_std_dev = np.std(self.m_available_list)
-        self.m_cumulative_pt_list = [sublist[0] for sublist in self.routing_data]
-        self.m_cumulative_pt_mean = np.mean(self.m_cumulative_pt_list)
-        self.m_cumulative_pt_std_dev = np.std(self.m_cumulative_pt_list)
-
-
-
-
     # the function of building incomplete experience is in brain module
     # this function is called only if the routing_learning_event of constituent machine is triggered
     # when this function is called upon the completion of an operation
     def complete_experience_full(self, job_idx, slack_change, critical_level_R):
         # first update current state, extract data from constituent machines
         self.state_update_before_routing()
-
-        # update the training data for routing
-        self.routing_training_data = [
-            self.job_creator.in_system_job_no,  # Total number of system jobs
-            self.buffer_num,                    # Total number of buffers in work center
-            self.ur_mean,                       # Mean of machine utilization rates
-            self.ur_std_dev,                    # Standard deviation of machine utilization rates
-            self.dummy_pt,                      # Mean of current processing time of jobs
-            self.m_available_mean,              # Mean of machine available time
-            self.m_available_std_dev,            # Standard deviation of machine available time
-            self.m_cumulative_pt_mean,          # Mean of cumulative processing time of jobs
-            self.m_cumulative_pt_std_dev        # Standard deviation of cumulative processing time of jobs
-        ]
         
         # get the state at the time of job output
         # s_t = self.build_state(self.routing_data, self.dummy_pt, 0, self.wc_idx)
-        s_t = self.build_state(self.routing_training_data, self.dummy_pt, 0, self.wc_idx)
+        s_t = self.build_state(self.routing_data, self.dummy_pt, 0, 0, self.wc_idx)
 
         # calculate reward of action
         # if slack time of job reduces, reward in [-1,0], if slack time increases, in [0,1]
@@ -318,5 +255,5 @@ class workcenter:
 
     def complete_experience_global_reward(self, job_idx, slack_change, critical_level_R):
         self.state_update_before_routing()
-        s_t = self.build_state(self.routing_training_data, self.dummy_pt, 0, self.wc_idx)
+        s_t = self.build_state(self.routing_data, self.dummy_pt, 0, 0, self.wc_idx)
         self.incomplete_experience[job_idx] += [s_t]

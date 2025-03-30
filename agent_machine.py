@@ -220,7 +220,7 @@ class machine:
 
 
     def starvation(self):
-        logging.info('STARVATION *BEGIN*: machine %s at time %s' %(self.m_idx, self.env.now))
+        # logging.info('STARVATION *BEGIN*: machine %s at time %s' %(self.m_idx, self.env.now))
         self.starvation_start = self.env.now
         # print('STARVATION *BEGIN*: machine %s at time %s' %(self.m_idx, self.env.now))
         # set the self.sufficient_stock event to untriggered
@@ -231,7 +231,7 @@ class machine:
         if not self.working_event.triggered:
             yield self.env.process(self.breakdown())
         self.starvation_end = self.env.now
-        logging.info('STARVATION *END*: machine %s at time: %s'%(self.m_idx, self.env.now))
+        # logging.info('STARVATION *END*: machine %s at time: %s'%(self.m_idx, self.env.now))
         # print('STARVATION *END*: machine %s at time: %s'%(self.m_idx, self.env.now))
 
     def breakdown(self):
@@ -528,7 +528,7 @@ class machine:
         self.time_till_due, self.slack, self.winq, self.avlm, self.next_pt, self.remaining_no_op, self.waited_time, \
         self.wc_idx, self.queue, self.m_idx]
         # print(" data : ",self.sequencing_data)
-        print("due_list: ", np.array(self.due_list))
+
         if self.log_info:
             job_info = [[self.current_pt, self.remaining_job_pt, np.array(self.due_list), self.env.now, self.completion_rate, \
         self.time_till_due, self.slack, self.winq, self.avlm, self.next_pt, self.remaining_no_op, self.waited_time, \

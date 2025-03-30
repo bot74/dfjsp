@@ -75,7 +75,7 @@ class sequencing_brain:
                 self.address_seed = "{}\\sequencing_models\\DQN\\MC_rwd_DQN"+str(kwargs['reward_function'])+".pt"
             if 'DDQN' in kwargs and kwargs['DDQN']:
                 print("self_train_DDQN chosen, press enter to continue...")
-                input()
+                # input()
                 self.train = self.train_ddqn
                 self.address_seed = "{}\\sequencing_models\\DDQN\\MC_rwd_DDQN"+str(kwargs['reward_function'])+".pt"
             self.action_DRL = self.action_sqc_rule
@@ -292,7 +292,9 @@ class sequencing_brain:
             for x in m.remaining_pt_list:
                 rem_pt += x.tolist()
         # processing time related data
-        pt_share = available_time[sqc_data[-1]] / sum(available_time) # sum of pt / sum of available time
+        total_time = sum(available_time)
+        pt_share = available_time[sqc_data[-1]] / total_time if total_time > 0 else 0
+
         global_pt_CV = np.std(rem_pt) / np.mean(rem_pt)
         # information of queuing jobs in queue
         local_pt_sum = np.sum(sqc_data[0])
@@ -303,11 +305,11 @@ class sequencing_brain:
         local_remaining_pt_sum = np.sum(sqc_data[1])
         local_remaining_pt_mean = np.mean(sqc_data[1])
         local_remaining_pt_max = np.max(sqc_data[1])
-        local_remaining_pt_CV = np.std(sqc_data[1]) / local_remaining_pt_mean
+        local_remaining_pt_CV = np.std(sqc_data[1]) / local_remaining_pt_mean if local_remaining_pt_mean > 0 else 0
         # information of WINQ
         avlm_mean = np.mean(sqc_data[8])
         avlm_min = np.min(sqc_data[8])
-        avlm_CV = np.std(sqc_data[8]) / avlm_mean
+        avlm_CV = np.std(sqc_data[8]) / avlm_mean if avlm_mean > 0 else 0
         # time-till-due related data:
         time_till_due = sqc_data[5]
         realized_tard_rate = time_till_due[time_till_due<0].size / local_job_no # ratio of tardy jobs
@@ -321,7 +323,7 @@ class sequencing_brain:
         slack_sum = slack.sum()
         slack_mean = slack.mean()
         slack_min = slack.min()
-        slack_CV = (slack.std() / slack_mean).clip(-2,2)
+        slack_CV = (slack.std() / slack_mean).clip(-2,2) if slack_mean > 0 else 0
         # use raw data, and leave the magnitude adjustment to normalization layers
         no_info = [in_system_job_no, arriving_job_no, local_job_no] # info in job number
         pt_info = [local_pt_sum, local_pt_mean, local_pt_min] # info in processing time

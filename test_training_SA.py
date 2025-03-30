@@ -59,11 +59,11 @@ class shopfloor:
         '''STEP 4: initialize machines and work centers'''
         for wc in self.wc_list:
             wc.print_info = 0
-            wc.log_info = 1
+            wc.log_info = 0
             wc.initialization(self.job_creator)
         for i,m in enumerate(self.m_list):
             m.print_info = 0
-            m.log_info = 1
+            m.log_info = 0
             wc_idx = get_group_index(m_per_wc, i)
             m.initialization(self.m_list,self.wc_list,self.job_creator,self.wc_list[wc_idx])
 
@@ -82,7 +82,7 @@ class shopfloor:
 # create the environment instance for simulation
 env = simpy.Environment()
 # create the shop floor instance
-span = 10000
+span = 50000
 m = 6
 wc = random.randint(int(m/3),int(m/2))  # wc 的数量范围是 [2, 3]
 wc = 3
