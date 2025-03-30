@@ -1,6 +1,7 @@
 from torch import nn
 import torch
 from torch.distributions import Normal #引入torch里的正态分布
+import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"computing device: {device}")
@@ -55,8 +56,46 @@ class Critic(nn.Module):
 
         return value
 
-#经验获取？
+#经验回放，按理来说PPO不该用这个。这个类用来存放一些交互的经验
 class ReplayMemory:
+    def __init__(self, batch_size): #为什么经验池缺了td计算需要的next_state？ | td：时序差分
+        self.state_cap = []
+        self.action_cap = []
+        self.reward_cap = []
+        self.value_cap = []
+        self.done_cap = []
+        self.BATCH_SIZE = batch_size
 
-#Actor-Critic网络会被统一封装在PPOAgent类中
+    def add_memo(self, state, action, reward, value, done):
+        self.state_cap.append(state)
+        self.action_cap.append(action)
+        self.reward_cap.append(reward)
+        self.value_cap.append(value)
+        self.done_cap.append(done)
+
+    def sample(self):
+        num_state = len(self.state_cap)
+        #np.arange函数返回一个有终点和起点的固定步长的排列（可理解为等差数组）
+        batch_start_points = np.arange(0, num_state, self.BATCH_SIZE)
+        memory_indicies = np.arange(num_state, dtype=np.int32) #shuffle
+        np.random.shuffle(memory_indicies)
+        batches = [memory_indicies[i:i+self.BATCH_SIZE] for i in batch_start_points]
+
+        return np.array(self.state_cap), \
+            np.array(self.action_cap), \
+            np.array(self.reward_cap), \
+            np.array(self.value_cap), \
+            np.array(self.done_cap), \
+            batches
+
+
+    def clear_memo(self):
+        self.state_cap = []
+        self.action_cap = []
+        self.reward_cap = []
+        self.value_cap = []
+        self.done_cap = []
+
+
+#Actor-Critic网络和memory会被统一封装在PPOAgent类中
 class PPOAgent:
