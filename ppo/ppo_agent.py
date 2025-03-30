@@ -8,6 +8,10 @@ print(f"computing device: {device}")
 #Actor 网络
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_dim=256):
+        #在PyTorch的神经网络类中，super()的作用是 调用父类（nn.Module）的构造函数，
+        # 确保父类的初始化逻辑被正确执行。这是神经网络模块能正常工作的基础。
+        # super()返回父类(nn.Module)的实例，使你能够调用父类的方法。
+        # __init__()显式调用父类的构造函数
         super(Actor).__init__()
         self.fc1 = nn.Linear(state_dim. hidden_dim) #全连接1
         self.fc2 == nn.Linear(hidden_dim, hidden_dim) #全连接2
@@ -36,7 +40,20 @@ class Actor(nn.Module):
 
         return action #返回选择的动作
 #Critic网络
-class Critic:
+class Critic(nn.Module):
+    def __init__(self, state_dim, hidden_dim=256):
+        super(Critic).__init__()
+        self.fc1 = nn.Linear(state_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim) #接着前面的hidden_dim
+        self.fc3 = nn.Linear(hidden_dim, out_features=1) #输出特征，1维
+        self.relu = nn.ReLU
+
+    def forward(self, x):
+        x = self.relu(self.fc1(x)) #过第一层relu激活
+        x = self.relu(self.fc2(x))
+        value = self.fc3(x)
+
+        return value
 
 #经验获取？
 class ReplayMemory:
