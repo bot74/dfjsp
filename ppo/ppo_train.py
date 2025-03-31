@@ -1,8 +1,9 @@
 import time
 import os.path
-import gym
+import gymnasium as gym #trying to migrate from gym to gymnasium
 import torch
 import numpy as np
+from ppo_agent import PPOAgent #todo
 
 scenario = 'Pendulum-v1'
 env = gym.make(scenario)
@@ -10,6 +11,8 @@ env = gym.make(scenario)
 #保存模型的路径和文件格式
 current_path = os.path.dirname(os.path.realpath(__file__))
 model = current_path + "/models/"
+if not os.path.exists(model): #若文件夹不存在则新建，否则可能无法保存模型
+    os.makedirs(model)
 timestamp = time.strftime("%Y%m%d%H%M%S")
 
 #超参设置
