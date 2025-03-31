@@ -1,6 +1,6 @@
 import time
 import os.path
-import gym
+import gymnasium as gym #trying to migrate from gym to gymnasium
 import torch
 import numpy as np
 from ppo_agent import PPOAgent #todo
