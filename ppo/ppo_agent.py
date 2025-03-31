@@ -123,7 +123,7 @@ class PPOAgent:
         self.critic = Critic(state_dim).to(device) #同样放到gpu
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=self.LR_ACTOR) #用Adam来调整actor网络参数
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=self.LR_CRITIC) #Adam最常见，无脑用了
-        self.repaly_buffer = ReplayMemory(batch_size) #实例化
+        self.replay_buffer = ReplayMemory(batch_size) #实例化
 
 
 
@@ -168,7 +168,7 @@ class PPOAgent:
         # theta_old = theta
         for epoch_i in range(self.NUM_EPOCH):
             # 取样整个memory
-            memo_states, memo_actions, memo_rewards, memo_values, memo_dones, batches = self.repaly_buffer.sample()
+            memo_states, memo_actions, memo_rewards, memo_values, memo_dones, batches = self.replay_buffer.sample()
             T = len(memo_rewards) # 用老的策略跑T步
             # 为GAE计算结果申请内存空间，跑T步，申请T个，类型选择精度没那么高的float32够用
             memo_advantages = np.zeros(T, dtype = np.float32)
@@ -223,7 +223,7 @@ class PPOAgent:
                 ratio = torch.exp(batch_probs_tensor - batch_old_probs_tensor)
                 #surrogate?
                 surr1 = ratio * memo_advantages_tensor[batch]
-                surr2 = torch.clamp(ratio, 1-self.EPSILON_CLIP, 1+self.EPSILON_CLIP) * memo_advantages[batch]
+                surr2 = torch.clamp(ratio, 1-self.EPSILON_CLIP, 1+self.EPSILON_CLIP) * memo_advantages_tensor[batch]
 
                 LossPPO2 = -torch.min(surr1, surr2).mean()
 
@@ -248,7 +248,7 @@ class PPOAgent:
                 critic_loss.backward() # 反向传播
                 self.critic_optimizer.step() # 根据梯度更新策略网络参数
 
-        self.repaly_buffer.clear_memo() # 清空经验池，下次update用新的经验
+        self.replay_buffer.clear_memo() # 清空经验池，下次update用新的经验
                 
 
     def save_policy(self):

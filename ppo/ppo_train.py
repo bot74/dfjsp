@@ -39,6 +39,11 @@ for episode_i in range(NUM_EPISODE):
         action, value = agent.get_action(state) #value可以一起计算出来
         next_state, reward, done, truncated, info = env.step(action)
         episode_reward += reward
+        # Gym 从 0.26 版本开始引入 truncated 和 terminated 分离的终止标志：
+        # terminated：环境因任务成功/失败终止（如游戏胜利或死亡）。
+        # truncated：环境因外部条件终止（如步数耗尽）。
+        # 本demo环境pendulum可能无truncated信号，所以done中不加处理
+        # 从而覆盖了环境原本的终止信号
         done = True if (step_i+1) == NUM_STEP else False
         agent.replay_buffer.add_memo(state, action, reward, value, done) #agent获取经验，todo
         state = next_state #准备开始下一个循环
